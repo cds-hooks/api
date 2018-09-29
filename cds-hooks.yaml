@@ -25,7 +25,7 @@ paths:
         200:
           description: Success (includes CDS service metadata)
           schema:
-            $ref: '#/definitions/CDS Service Information'
+            $ref: '#/definitions/CDS%20Service%20Information'
 
   /cds-services/{id}:
     post:
@@ -41,12 +41,12 @@ paths:
           description: Body of CDS service request
           required: true
           schema:
-            $ref: '#/definitions/CDS Request'
+            $ref: '#/definitions/CDS%20Request'
       responses:
         200:
           description: Success (includes CDS Cards and Decisions)
           schema:
-            $ref: '#/definitions/CDS Response'
+            $ref: '#/definitions/CDS%20Response'
 
   /cds-services/{id}/analytics/{uuid}:
     post:
@@ -76,7 +76,7 @@ definitions:
       services:
         type: array
         items:
-           $ref: '#/definitions/CDS Service'
+           $ref: '#/definitions/CDS%20Service'
 
   CDS Service:
     type: object
@@ -106,20 +106,12 @@ definitions:
       fhirServer:
         type: string
         format: url
-      oauth:
+      fhirAuthorization:
         type: object
-      redirect:
-        type: string
       user:
         type: string
-      patient:
-        type: string
-      encounter:
-        type: string
       context:
-        type: array
-        items:
-          type: object
+        type: object
       prefetch:
         type: object
 
@@ -145,7 +137,7 @@ definitions:
         enum:
           - info
           - warning
-          - hard-stop
+          - critical
       source:
         $ref: '#/definitions/Source'
       suggestions:
@@ -173,6 +165,9 @@ definitions:
       url:
         type: string
         format: url
+      icon:
+        type: string
+        format: url
 
   Link:
     type: object
@@ -183,6 +178,8 @@ definitions:
         type: string
         format: url
       type:
+        type: string
+      appContext:
         type: string
 
   Suggestion:
