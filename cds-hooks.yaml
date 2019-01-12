@@ -44,27 +44,9 @@ paths:
             $ref: '#/definitions/CDS%20Request'
       responses:
         200:
-          description: Success (includes CDS Cards and Decisions)
+          description: Success (includes CDS Cards)
           schema:
             $ref: '#/definitions/CDS%20Response'
-
-  /cds-services/{id}/analytics/{uuid}:
-    post:
-      description: Creates an analytics event for this service to indicate the user engaged with the event identified by the given UUID
-      parameters:
-        - name: id
-          in: path
-          description: The id of this CDS service
-          required: true
-          type: string
-        - name: uuid
-          in: path
-          description: The UUID of the event (for example, a suggestion)
-          required: true
-          type: string
-      responses:
-        200:
-          description: Success
 
 ################################################################################
 #                                 Definitions                                  #
@@ -108,8 +90,6 @@ definitions:
         format: url
       fhirAuthorization:
         type: object
-      user:
-        type: string
       context:
         type: object
       prefetch:
@@ -122,8 +102,6 @@ definitions:
         type: array
         items:
           $ref: '#/definitions/Card'
-      decisions:
-        type: object
 
   Card:
     type: object
@@ -144,6 +122,10 @@ definitions:
         type: array
         items:
           $ref: '#/definitions/Suggestion'
+      selectionBehavior:
+        type: string
+        enum:
+          - at-most-one
       links:
         type: array
         items:
