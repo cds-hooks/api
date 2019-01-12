@@ -91,11 +91,25 @@ definitions:
         type: string
         format: url
       fhirAuthorization:
-        type: object
+        $ref: '#/definitions/FHIR%20Authorization'
       context:
         type: object
       prefetch:
         type: object
+
+  FHIR Authorization:
+    type: object
+    properties:
+      access_token:
+        type: string
+      token_type:
+        type: string
+      expires_in:
+        type: integer
+      scope:
+        type: string
+      subject:
+        type: string
 
   CDS Response:
     type: object
