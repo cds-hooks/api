@@ -67,7 +67,8 @@ definitions:
         type: string
         description: short id for this service, unique with the CDS Provider (will be used in URL paths)
       hook:
-        $ref: '#/definitions/Hook'
+        type: string
+        description: The hook this service should be invoked on.
       title:
         type: string
         description: Human-readable name for the CDS Service (e.g. "CMS Drug Pricing Service")
@@ -81,7 +82,8 @@ definitions:
     type: object
     properties:
       hook:
-        $ref: '#/definitions/Hook'
+        type: string
+        description: The hook that triggered this CDS Service call.
       hookInstance:
         type: string
         format: uuid
@@ -130,14 +132,6 @@ definitions:
         type: array
         items:
           $ref: '#/definitions/Link'
-
-  Hook:
-    type: string
-    description: EHR event that triggers an external decision support request
-    enum:
-      - patient-view
-      - medication-prescribe
-      - order-review
 
   Source:
     type: object
