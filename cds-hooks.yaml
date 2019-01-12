@@ -187,6 +187,6 @@ definitions:
 
   Prefetch:
     type: object
-    description: queries that the CDS Service would like the EHR to execute before every call
+    description: queries that the CDS Service would like the CDS Client to execute before every call
     additionalProperties:
       type: string
