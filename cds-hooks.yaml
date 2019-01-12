@@ -25,7 +25,7 @@ paths:
         200:
           description: Success (includes CDS service metadata)
           schema:
-            $ref: '#/definitions/CDS Service Information'
+            $ref: '#/definitions/CDS%20Service%20Information'
 
   /cds-services/{id}:
     post:
@@ -41,30 +41,12 @@ paths:
           description: Body of CDS service request
           required: true
           schema:
-            $ref: '#/definitions/CDS Request'
+            $ref: '#/definitions/CDS%20Request'
       responses:
         200:
-          description: Success (includes CDS Cards and Decisions)
+          description: Success (includes CDS Cards)
           schema:
-            $ref: '#/definitions/CDS Response'
-
-  /cds-services/{id}/analytics/{uuid}:
-    post:
-      description: Creates an analytics event for this service to indicate the user engaged with the event identified by the given UUID
-      parameters:
-        - name: id
-          in: path
-          description: The id of this CDS service
-          required: true
-          type: string
-        - name: uuid
-          in: path
-          description: The UUID of the event (for example, a suggestion)
-          required: true
-          type: string
-      responses:
-        200:
-          description: Success
+            $ref: '#/definitions/CDS%20Response'
 
 ################################################################################
 #                                 Definitions                                  #
@@ -76,16 +58,21 @@ definitions:
       services:
         type: array
         items:
-           $ref: '#/definitions/CDS Service'
+           $ref: '#/definitions/CDS%20Service'
 
   CDS Service:
     type: object
+    required:
+      - id
+      - hook
+      - description
     properties:
       id:
         type: string
         description: short id for this service, unique with the CDS Provider (will be used in URL paths)
       hook:
-        $ref: '#/definitions/Hook'
+        type: string
+        description: The hook this service should be invoked on.
       title:
         type: string
         description: Human-readable name for the CDS Service (e.g. "CMS Drug Pricing Service")
@@ -97,44 +84,65 @@ definitions:
 
   CDS Request:
     type: object
+    required:
+      - hook
+      - hookInstance
+      - context
     properties:
       hook:
-        $ref: '#/definitions/Hook'
+        type: string
+        description: The hook that triggered this CDS Service call.
       hookInstance:
         type: string
         format: uuid
       fhirServer:
         type: string
         format: url
-      oauth:
-        type: object
-      redirect:
-        type: string
-      user:
-        type: string
-      patient:
-        type: string
-      encounter:
-        type: string
+      fhirAuthorization:
+        $ref: '#/definitions/FHIR%20Authorization'
       context:
-        type: array
-        items:
-          type: object
+        type: object
       prefetch:
         type: object
 
+  FHIR Authorization:
+    type: object
+    required:
+      - access_token
+      - token_type
+      - expires_in
+      - scope
+      - subject
+    properties:
+      access_token:
+        type: string
+      token_type:
+        type: string
+        enum:
+          - Bearer
+      expires_in:
+        type: integer
+      scope:
+        type: string
+      subject:
+        type: string
+
   CDS Response:
     type: object
+    required:
+      - cards
     properties:
       cards:
         type: array
         items:
           $ref: '#/definitions/Card'
-      decisions:
-        type: object
 
   Card:
     type: object
+    required:
+      - summary
+      - indicator
+      - source
     properties:
       summary:
         type: string
@@ -145,32 +153,33 @@ definitions:
         enum:
           - info
           - warning
-          - hard-stop
+          - critical
       source:
         $ref: '#/definitions/Source'
       suggestions:
         type: array
         items:
           $ref: '#/definitions/Suggestion'
+      selectionBehavior:
+        type: string
+        enum:
+          - at-most-one
       links:
         type: array
         items:
           $ref: '#/definitions/Link'
 
-  Hook:
-    type: string
-    description: EHR event that triggers an external decision support request
-    enum:
-      - patient-view
-      - medication-prescribe
-      - order-review
-
   Source:
     type: object
+    required:
+      - label
     properties:
       label:
         type: string
       url:
+        type: string
+        format: url
+      icon:
         type: string
         format: url
 
@@ -184,9 +193,13 @@ definitions:
         format: url
       type:
         type: string
+      appContext:
+        type: string
 
   Suggestion:
     type: object
+    required:
+      - label
     properties:
       label:
         type: string
@@ -200,6 +213,9 @@ definitions:
 
   Action:
     type: object
+    required:
+      - type
+      - description
     properties:
       type:
         type: string
@@ -214,6 +230,6 @@ definitions:
 
   Prefetch:
     type: object
-    description: queries that the CDS Service would like the EHR to execute before every call
+    description: queries that the CDS Service would like the CDS Client to execute before every call
     additionalProperties:
       type: string
