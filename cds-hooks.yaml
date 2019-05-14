@@ -185,6 +185,10 @@ definitions:
 
   Link:
     type: object
+    required:
+      - label
+      - url
+      - type
     properties:
       label:
         type: string
@@ -193,6 +197,9 @@ definitions:
         format: url
       type:
         type: string
+        enum:
+          - absolute
+          - smart
       appContext:
         type: string
 
