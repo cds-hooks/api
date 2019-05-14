@@ -197,6 +197,9 @@ definitions:
         format: url
       type:
         type: string
+        enum:
+          - absolute
+          - smart
       appContext:
         type: string
 
