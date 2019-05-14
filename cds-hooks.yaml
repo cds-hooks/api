@@ -185,6 +185,10 @@ definitions:
 
   Link:
     type: object
+    required:
+      - label
+      - url
+      - type
     properties:
       label:
         type: string
