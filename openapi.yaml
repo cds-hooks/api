@@ -1,0 +1,340 @@
+openapi: 3.0.0
+info:
+  title: CDS Hooks REST API
+  version: '1.0'
+paths:
+  /cds-services:
+    get:
+      description: Get a description of all CDS services offered by this CDS Provider
+      operationId: cdsServicesGet
+      responses:
+        '200':
+          description: List of CDS services available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CdsServiceInformation'
+          links:
+            PostToCdsService: 
+              operationId: cdsServicePost
+              parameters:
+                serviceId: '$response.body#/services/0/id'
+              description: >
+                The `id` values returned in the response entries can be used as
+                the `serviceId` parameter in `POST /cds-services/{serviceId}`
+  /cds-services/{serviceId}:
+    post:
+      security: 
+        - clientIssuedJwt: []
+      description: Invoke a CDS service offered by this CDS Provider
+      operationId: cdsServicePost
+      parameters:
+        - name: serviceId
+          in: path
+          description: The id of this CDS service
+          example: CmsDrugPricing
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CdsRequest'
+      responses:
+        '200':
+          description: Success (includes CDS Cards)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CdsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '412':
+          $ref: '#/components/responses/InsufficientContext'
+      
+servers:
+  - url: '{scheme}://{host}{path}'
+    variables:
+      scheme:
+        default: https
+        enum:
+          - https
+        description: The transfer protocol used by the server
+      host:
+        default: cds-service-example.herokuapp.com
+        description: The domain/host name of the server
+      path:
+        default: /
+        description: The base path of the CDS service
+    description: The base URL of the CDS service
+components:
+  schemas:
+    CdsServiceInformation:
+      type: object
+      properties:
+        services: 
+          description: An array of **CDS Services**
+          type: array
+          items:
+             $ref: '#/components/schemas/CdsService'
+    
+    CdsService:
+      type: object
+      required:
+        - id
+        - hook
+        - description
+      properties:
+        id:
+          type: string
+          description: short id for this service, unique with the CDS Provider (will be used in URL paths)
+          example: CmsDrugPricing
+        hook:
+          description: The hook this service should be invoked on.
+          allOf:
+            - $ref: '#/components/schemas/Hook'
+        title:
+          type: string
+          description: Human-readable name for the CDS Service (e.g. "CMS Drug Pricing Service")
+          example: CMS Drug Pricing Service
+        description:
+          type: string
+          description: Longer-form description of what the service offers
+        prefetch:
+          $ref: '#/components/schemas/PrefetchTemplate'
+          
+    CdsRequest:
+      type: object
+      required:
+        - hook
+        - hookInstance
+        - context
+      properties:
+        hook:
+          description: The hook that triggered this CDS Service call.
+          allOf:
+            - $ref: '#/components/schemas/Hook'
+        hookInstance:
+          type: string
+          format: uuid
+        fhirServer:
+          $ref: '#/components/schemas/FhirServer'
+        fhirAuthorization:
+          $ref: '#/components/schemas/FhirAuthorization'
+        context:
+          anyOf:
+            - $ref: '#/components/schemas/PatientViewContext'
+            - type: object
+        prefetch:
+          $ref: '#/components/schemas/PrefetchResponse'
+            
+    Hook:
+      type: string
+      example: patient-view
+    
+    FhirServer:
+      description: The base URL of the CDS Client's FHIR server. If fhirAuthorization is provided, this field is REQUIRED. The scheme should be https
+      type: string
+      format: url
+      example: http://hooks.smarthealthit.org:9080
+    
+    FhirAuthorization:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+        - scope
+        - subject
+      properties:
+        access_token:
+          type: string
+          example: some-opaque-fhir-access-token
+          description: This is the OAuth 2.0 access token that provides access to the FHIR server.
+        token_type:
+          type: string
+          enum:
+            - Bearer
+          description: Fixed value *Bearer*
+        expires_in:
+          type: integer
+          example: 300
+        scope:
+          type: string
+          example: patient/Patient.read patient/Observation.read
+        subject:
+          type: string
+          example: cds-service4
+      
+    CdsResponse:
+      type: object
+      required:
+        - cards
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/Card'
+    Card:
+      type: object
+      required:
+        - summary
+        - indicator
+        - source
+      properties:
+        summary:
+          type: string
+        detail:
+          type: string
+        indicator:
+          type: string
+          enum:
+            - info
+            - warning
+            - critical
+        source:
+          $ref: '#/components/schemas/Source'
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Suggestion'
+        selectionBehavior:
+          type: string
+          enum:
+            - at-most-one
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/Link'
+    Source:
+      type: object
+      required:
+        - label
+      properties:
+        label:
+          type: string
+        url:
+          type: string
+          format: url
+        icon:
+          type: string
+          format: url
+
+    Link:
+      type: object
+      properties:
+        label:
+          type: string
+        url:
+          type: string
+          format: url
+        type:
+          type: string
+        appContext:
+          type: string
+    
+    Suggestion:
+      type: object
+      required:
+        - label
+      properties:
+        label:
+          type: string
+        uuid:
+          type: string
+          format: uuid
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Action'
+    
+    Action:
+      type: object
+      required:
+        - type
+        - description
+      properties:
+        type:
+          type: string
+          enum:
+            - create
+            - update
+            - delete
+        description:
+          type: string
+        resource:
+          type: object
+  
+    PrefetchTemplate:
+      type: object
+      additionalProperties:
+        type: string
+      description: queries that the CDS Service would like the CDS Client to execute before every call
+      example:
+          patient: "Patient/{{context.patientId}}"
+          encounters: "Encounter?subject={{context.patientId}}"
+        
+    PrefetchResponse:
+      type: object
+      example:
+        patient:
+          resourceType: Patient
+          gender: male
+          birthDate: '1925-12-23'
+          id: '1288992'
+          active: true
+          
+        encounters:
+          resourceType: Bundle
+          entry:
+            - resource:
+                resourceType: Encounter
+                subject:
+                  display: Patient, Test
+                  reference: Patient/1288992
+                participant:
+                  - individual:
+                      display: User, Test
+                      reference: Pracitioner/1254677
+                id: '1345399'
+      additionalProperties:
+        type: object
+      description: >
+        The clinical data that was prefetched by the CDS Client.
+
+    PatientViewContext:
+      type: object
+      required:
+        - userId
+        - patientId
+      example:
+        userId: Pracitioner/1254677
+        patientId: '1288992'
+      properties:
+        userId:
+          type: string
+        patientId:
+          type: string
+        encounterId:
+          type: string
+        
+  responses:
+    UnauthorizedError:
+      description: CDS client failed to **[authenticate with the service](https://cds-hooks.hl7.org/1.0/#trusting-cds-clients)**
+    InsufficientContext:
+      description: >-
+        The context, prefetch and/or fhirAuthorization provided was not sufficient for this service
+  
+  securitySchemes:
+    clientIssuedJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        See security recommendations for [trusting CDS Clients](https://cds-hooks.hl7.org/1.0/#trusting-cds-clients)
+
+externalDocs:
+  description: CDS Hooks specification
+  url: 'https://cds-hooks.hl7.org/1.0'
