@@ -7,6 +7,8 @@ paths:
     get:
       description: Get a description of all CDS services offered by this CDS Provider
       operationId: cdsServicesGet
+      security: 
+        - clientIssuedJwt: []
       responses:
         '200':
           description: List of CDS services available
@@ -22,6 +24,7 @@ paths:
               description: >
                 The `id` values returned in the response entries can be used as
                 the `serviceId` parameter in `POST /cds-services/{serviceId}`
+                
   /cds-services/{serviceId}:
     post:
       security: 
@@ -53,6 +56,39 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '412':
           $ref: '#/components/responses/InsufficientContext'
+          
+  /cds-services/{serviceId}/feedback:
+    post:
+      security: 
+        - clientIssuedJwt: []
+      description: Invoke a CDS service offered by this CDS Provider
+      operationId: cdsServiceFeedbackPost
+      parameters:
+        - name: serviceId
+          in: path
+          description: The id of this CDS service
+          example: CmsDrugPricing
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - feedback
+              properties:
+                feedback:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Feedback'
+      responses:
+        '200':
+          description: Feedback posted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
       
 servers:
   - url: '{scheme}://{host}{path}'
@@ -402,7 +438,60 @@ components:
         display: 
           type: string
           description: A short, human-readable label to display.
-  
+          
+    Feedback:
+      type: object
+      required:
+        - card
+        - outcome
+        - outcomeTimestamp
+      properties:
+        card: 
+          example: "`card.uuid` from CDS Hooks response"
+          type: string
+          description: The `card.uuid` from the CDS Hooks response. Uniquely identifies the card.
+        outcome:
+          type: string
+          example: accepted
+          enum:
+            - accepted
+            - overridden
+          description: A value of `accepted` or `overridden`.
+        acceptedSuggestions:
+          description: An array of json objects identifying one or more of the user's **AcceptedSuggestion**s. Required for `accepted` outcomes.
+          type: array
+          items:
+            $ref: '#/components/schemas/AcceptedSuggestion'
+        overrideReasons:
+          $ref: '#/components/schemas/OverrideReason'
+        outcomeTimestamp:
+          type: string
+          format: date-time
+          
+    AcceptedSuggestion: 
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "`card.suggestion.uuid` from CDS Hooks response"
+          description: >
+            The `card.suggestion.uuid` from the CDS Hooks response. Uniquely identifies the suggestion that was accepted.
+      
+    OverrideReason:
+      description: A json object capturing the override reason as a `Coding` as well as any comments entered by the user.
+      type: object
+      properties:
+        reason:
+          description: >
+            The Coding object representing the override reason selected by the end user. Required if user selected an override reason from the list of reasons provided in the Card (instead of only leaving a userComment)
+          allOf:
+            - $ref: '#/components/schemas/OverrideReason'
+        userComment:
+          type: string
+          description: >
+            The CDS Client may enable the clinician to further explain why the card was rejected with free text. That user comment may be communicated to the CDS Service as a `userComment`.
+    
     # PatientViewContext:
     #   type: object
     #   required:
