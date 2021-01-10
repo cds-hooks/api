@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
   title: CDS Hooks REST API
-  version: '1.0'
+  version: '1.1'
 paths:
   /cds-services:
     get:
@@ -89,21 +89,30 @@ components:
       properties:
         id:
           type: string
-          description: short id for this service, unique with the CDS Provider (will be used in URL paths)
-          example: CmsDrugPricing
+          description: The {id} portion of the URL to this service which is available at `{baseUrl}/cds-services/{id}`
+          example: static-patient-greeter
         hook:
-          description: The hook this service should be invoked on.
+          description: The hook this service should be invoked on. See [Hooks](https://cds-hooks.org/specification/current/#hooks).
           allOf:
             - $ref: '#/components/schemas/Hook'
         title:
           type: string
-          description: Human-readable name for the CDS Service (e.g. "CMS Drug Pricing Service")
-          example: CMS Drug Pricing Service
+          description: The human-friendly name of this service.
+          example: Static CDS Service Example
         description:
           type: string
-          description: Longer-form description of what the service offers
+          description: The description of this service.
+          example: An example of a CDS Service that returns a static set of cards
         prefetch:
           $ref: '#/components/schemas/PrefetchTemplate'
+    
+    PrefetchTemplate:
+      type: object
+      additionalProperties:
+        type: string
+      description: An object containing key/value pairs of FHIR queries that this service is requesting that the CDS Client prefetch and provide on each service call. The key is a *string* that describes the type of data being requested and the value is a *string* representing the FHIR query. See [Prefetch Template](https://cds-hooks.org/specification/current/#prefetch-template).
+      example:
+          patientToGreet: "Patient/{{context.patientId}}"
           
     CdsRequest:
       type: object
@@ -113,35 +122,64 @@ components:
         - context
       properties:
         hook:
-          description: The hook that triggered this CDS Service call.
+          description: The hook that triggered this CDS Service call. See [Hooks](https://cds-hooks.org/specification/current/#hooks).
           allOf:
             - $ref: '#/components/schemas/Hook'
         hookInstance:
+          example: d1577c69-dfbe-44ad-ba6d-3e05e953b2ea
           type: string
           format: uuid
+          description: 
+            A universally unique identifier (UUID) for this particular hook call.
+            While working in the CDS Client, a user can perform multiple actions in series or in parallel. For example, a clinician might prescribe two drugs in a row; each prescription action would be assigned a unique `hookInstance`. This allows a CDS Service to uniquely identify each hook invocation.
+            Note":" the `hookInstance` is globally unique and should contain enough entropy to be un-guessable."
+
         fhirServer:
           $ref: '#/components/schemas/FhirServer'
         fhirAuthorization:
           $ref: '#/components/schemas/FhirAuthorization'
         context:
+          description: 
+            Hook-specific contextual data that the CDS service will need.
+            For example, with the patient-view hook this will include the FHIR identifier of the [Patient](https://www.hl7.org/fhir/patient.html) being viewed. For details, see the Hooks specification page.
           anyOf:
-            - $ref: '#/components/schemas/PatientViewContext'
+            # - $ref: '#/components/schemas/PatientViewContext'
             - type: object
+          example:
+            userId: Practitioner/example
+            patientId: "1288992"
+            encounterId: "89284"
         prefetch:
           $ref: '#/components/schemas/PrefetchResponse'
+        
+    PrefetchResponse:
+      type: object
+      example:
+        patient:
+         resourceType: Patient
+         gender: male
+         birthDate: "1925-12-23"
+         id: "1288992"
+         active: true
+          
+      additionalProperties:
+        type: object
+      description: >
+        The FHIR data that was prefetched by the CDS Client.
             
     Hook:
       type: string
       example: patient-view
     
     FhirServer:
-      description: The base URL of the CDS Client's FHIR server. If fhirAuthorization is provided, this field is REQUIRED. The scheme should be https
+      description: The base URL of the CDS Client's [FHIR](https://www.hl7.org/fhir/) server. If fhirAuthorization is provided, this field is REQUIRED. The scheme should be `https`
       type: string
       format: url
       example: http://hooks.smarthealthit.org:9080
     
     FhirAuthorization:
       type: object
+      description: A structure holding an [OAuth 2.0](https://oauth.net/2/) bearer access token granting the CDS Service access to FHIR resources, along with supplemental information relating to the token. See the [FHIR Resource Access](https://cds-hooks.org/specification/current/#fhir-resource-access) section for more information.
       required:
         - access_token
         - token_type
@@ -157,16 +195,19 @@ components:
           type: string
           enum:
             - Bearer
-          description: Fixed value *Bearer*
+          description: Fixed value `Bearer`
         expires_in:
           type: integer
           example: 300
+          description: The lifetime in seconds of the access token.
         scope:
           type: string
           example: patient/Patient.read patient/Observation.read
+          description: 	The scopes the access token grants the CDS Service. The scopes granted to the CDS Service via the scope field are defined by the [SMART on FHIR specification](http://hl7.org/fhir/smart-app-launch/1.0.0/scopes-and-launch-context/).
         subject:
           type: string
           example: cds-service4
+          description: The [OAuth 2.0](https://oauth.net/2/) client identifier of the CDS Service, as registered with the CDS Client's authorization server.
       
     CdsResponse:
       type: object
@@ -267,58 +308,21 @@ components:
         resource:
           type: object
   
-    PrefetchTemplate:
-      type: object
-      additionalProperties:
-        type: string
-      description: queries that the CDS Service would like the CDS Client to execute before every call
-      example:
-          patient: "Patient/{{context.patientId}}"
-          encounters: "Encounter?subject={{context.patientId}}"
-        
-    PrefetchResponse:
-      type: object
-      example:
-        patient:
-          resourceType: Patient
-          gender: male
-          birthDate: '1925-12-23'
-          id: '1288992'
-          active: true
-          
-        encounters:
-          resourceType: Bundle
-          entry:
-            - resource:
-                resourceType: Encounter
-                subject:
-                  display: Patient, Test
-                  reference: Patient/1288992
-                participant:
-                  - individual:
-                      display: User, Test
-                      reference: Pracitioner/1254677
-                id: '1345399'
-      additionalProperties:
-        type: object
-      description: >
-        The clinical data that was prefetched by the CDS Client.
-
-    PatientViewContext:
-      type: object
-      required:
-        - userId
-        - patientId
-      example:
-        userId: Pracitioner/1254677
-        patientId: '1288992'
-      properties:
-        userId:
-          type: string
-        patientId:
-          type: string
-        encounterId:
-          type: string
+    # PatientViewContext:
+    #   type: object
+    #   required:
+    #     - userId
+    #     - patientId
+    #   example:
+    #     userId: Pracitioner/1254677
+    #     patientId: '1288992'
+    #   properties:
+    #     userId:
+    #       type: string
+    #     patientId:
+    #       type: string
+    #     encounterId:
+    #       type: string
         
   responses:
     UnauthorizedError:
