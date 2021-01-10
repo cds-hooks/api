@@ -2,9 +2,41 @@ openapi: 3.0.0
 info:
   title: CDS Hooks REST API
   version: '1.1'
+
+servers:
+  - url: '{scheme}://{host}{path}'
+    variables:
+      scheme:
+        default: https
+        enum:
+          - https
+        description: The transfer protocol used by the server
+      host:
+        default: cds-service-example.herokuapp.com
+        description: The domain/host name of the server
+      path:
+        default: /
+        description: The base path of the CDS service
+    description: The base URL of the CDS service
+
+tags:
+- name: discovery
+  externalDocs:
+    description: Allow clients to discover available services
+    url: https://cds-hooks.org/specification/current/#discovery
+- name: service
+  description: Services offered
+- name: feedback
+  externalDocs:
+    description: Accept feedback on your services
+    url: https://cds-hooks.org/specification/current/#feedback
+
 paths:
   /cds-services:
+    x-swagger-router-controller: discovery
     get:
+      tags:
+        - discovery
       description: Get a description of all CDS services offered by this CDS Provider
       operationId: cdsServicesGet
       security: 
@@ -26,7 +58,10 @@ paths:
                 the `serviceId` parameter in `POST /cds-services/{serviceId}`
                 
   /cds-services/{serviceId}:
+    x-swagger-router-controller: service
     post:
+      tags:
+        - service
       security: 
         - clientIssuedJwt: []
       description: Invoke a CDS service offered by this CDS Provider
@@ -58,7 +93,10 @@ paths:
           $ref: '#/components/responses/InsufficientContext'
           
   /cds-services/{serviceId}/feedback:
+    x-swagger-router-controller: feedback
     post:
+      tags:
+        - feedback
       security: 
         - clientIssuedJwt: []
       description: Invoke a CDS service offered by this CDS Provider
@@ -89,22 +127,7 @@ paths:
           description: Feedback posted
         '401':
           $ref: '#/components/responses/UnauthorizedError'
-      
-servers:
-  - url: '{scheme}://{host}{path}'
-    variables:
-      scheme:
-        default: https
-        enum:
-          - https
-        description: The transfer protocol used by the server
-      host:
-        default: cds-service-example.herokuapp.com
-        description: The domain/host name of the server
-      path:
-        default: /
-        description: The base path of the CDS service
-    description: The base URL of the CDS service
+
 components:
   schemas:
     CdsServiceInformation:
@@ -311,6 +334,12 @@ components:
           items:
             $ref: '#/components/schemas/Coding'
           example:
+            - code: reason-code-provided-by-service
+              system: 'http://example.org/cds-services/fhir/CodeSystem/override-reasons'
+              display: Patient refused
+            - code: '12354'
+              system: 'http://example.org/cds-services/fhir/CodeSystem/override-reasons'
+              display: Contraindicated
         links:
           description: Allows a service to suggest a link to an app that the user might want to run for additional information or to help guide a decision.
           type: array
@@ -414,7 +443,7 @@ components:
             - delete
         description:
           example: Create a prescription for Acetaminophen 250 MG
-          description: 	Human-readable description of the suggested action MAY be presented to the end-user.
+          description:   Human-readable description of the suggested action MAY be presented to the end-user.
           type: string
         resource:
           description: >
