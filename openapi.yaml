@@ -310,6 +310,7 @@ components:
           description: Override reasons can be selected by the end user when overriding a card without taking the suggested recommendations. The CDS service MAY return a list of override reasons to the CDS client. The CDS client SHOULD present these reasons to the clinician when they dismiss a card. A CDS client MAY augment the override reasons presented to the user with its own reasons.
           items:
             $ref: '#/components/schemas/Coding'
+          example:
         links:
           description: Allows a service to suggest a link to an app that the user might want to run for additional information or to help guide a decision.
           type: array
@@ -447,12 +448,12 @@ components:
         - outcomeTimestamp
       properties:
         card: 
-          example: "`card.uuid` from CDS Hooks response"
+          example: 9368d37b-283f-44a0-93ea-547cebab93ed
           type: string
           description: The `card.uuid` from the CDS Hooks response. Uniquely identifies the card.
         outcome:
           type: string
-          example: accepted
+          example: overridden
           enum:
             - accepted
             - overridden
@@ -462,7 +463,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AcceptedSuggestion'
-        overrideReasons:
+        overrideReason:
           $ref: '#/components/schemas/OverrideReason'
         outcomeTimestamp:
           type: string
@@ -485,9 +486,13 @@ components:
         reason:
           description: >
             The Coding object representing the override reason selected by the end user. Required if user selected an override reason from the list of reasons provided in the Card (instead of only leaving a userComment)
+          example:
+            code: reason-code-provided-by-service
+            system: reason-system-provided-by-service
           allOf:
             - $ref: '#/components/schemas/OverrideReason'
         userComment:
+          example: clinician entered comment
           type: string
           description: >
             The CDS Client may enable the clinician to further explain why the card was rejected with free text. That user comment may be communicated to the CDS Service as a `userComment`.
