@@ -1,12 +1,46 @@
 openapi: 3.0.0
 info:
   title: CDS Hooks REST API
-  version: '1.0'
+  version: '1.1'
+
+servers:
+  - url: '{scheme}://{host}{path}'
+    variables:
+      scheme:
+        default: https
+        enum:
+          - https
+        description: The transfer protocol used by the server
+      host:
+        default: cds-service-example.herokuapp.com
+        description: The domain/host name of the server
+      path:
+        default: /
+        description: The base path of the CDS service
+    description: The base URL of the CDS service
+
+tags:
+- name: discovery
+  externalDocs:
+    description: Allow clients to discover available services
+    url: https://cds-hooks.org/specification/current/#discovery
+- name: service
+  description: Services offered
+- name: feedback
+  externalDocs:
+    description: Accept feedback on your services
+    url: https://cds-hooks.org/specification/current/#feedback
+
 paths:
   /cds-services:
+    x-swagger-router-controller: discovery
     get:
+      tags:
+        - discovery
       description: Get a description of all CDS services offered by this CDS Provider
       operationId: cdsServicesGet
+      security: 
+        - clientIssuedJwt: []
       responses:
         '200':
           description: List of CDS services available
@@ -22,8 +56,12 @@ paths:
               description: >
                 The `id` values returned in the response entries can be used as
                 the `serviceId` parameter in `POST /cds-services/{serviceId}`
+                
   /cds-services/{serviceId}:
+    x-swagger-router-controller: service
     post:
+      tags:
+        - service
       security: 
         - clientIssuedJwt: []
       description: Invoke a CDS service offered by this CDS Provider
@@ -53,22 +91,43 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '412':
           $ref: '#/components/responses/InsufficientContext'
-      
-servers:
-  - url: '{scheme}://{host}{path}'
-    variables:
-      scheme:
-        default: https
-        enum:
-          - https
-        description: The transfer protocol used by the server
-      host:
-        default: cds-service-example.herokuapp.com
-        description: The domain/host name of the server
-      path:
-        default: /
-        description: The base path of the CDS service
-    description: The base URL of the CDS service
+          
+  /cds-services/{serviceId}/feedback:
+    x-swagger-router-controller: feedback
+    post:
+      tags:
+        - feedback
+      security: 
+        - clientIssuedJwt: []
+      description: Invoke a CDS service offered by this CDS Provider
+      operationId: cdsServiceFeedbackPost
+      parameters:
+        - name: serviceId
+          in: path
+          description: The id of this CDS service
+          example: CmsDrugPricing
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - feedback
+              properties:
+                feedback:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Feedback'
+      responses:
+        '200':
+          description: Feedback posted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
 components:
   schemas:
     CdsServiceInformation:
@@ -89,21 +148,30 @@ components:
       properties:
         id:
           type: string
-          description: short id for this service, unique with the CDS Provider (will be used in URL paths)
-          example: CmsDrugPricing
+          description: The {id} portion of the URL to this service which is available at `{baseUrl}/cds-services/{id}`
+          example: static-patient-greeter
         hook:
-          description: The hook this service should be invoked on.
+          description: The hook this service should be invoked on. See [Hooks](https://cds-hooks.org/specification/current/#hooks).
           allOf:
             - $ref: '#/components/schemas/Hook'
         title:
           type: string
-          description: Human-readable name for the CDS Service (e.g. "CMS Drug Pricing Service")
-          example: CMS Drug Pricing Service
+          description: The human-friendly name of this service.
+          example: Static CDS Service Example
         description:
           type: string
-          description: Longer-form description of what the service offers
+          description: The description of this service.
+          example: An example of a CDS Service that returns a static set of cards
         prefetch:
           $ref: '#/components/schemas/PrefetchTemplate'
+    
+    PrefetchTemplate:
+      type: object
+      additionalProperties:
+        type: string
+      description: An object containing key/value pairs of FHIR queries that this service is requesting that the CDS Client prefetch and provide on each service call. The key is a *string* that describes the type of data being requested and the value is a *string* representing the FHIR query. See [Prefetch Template](https://cds-hooks.org/specification/current/#prefetch-template).
+      example:
+          patientToGreet: "Patient/{{context.patientId}}"
           
     CdsRequest:
       type: object
@@ -113,35 +181,64 @@ components:
         - context
       properties:
         hook:
-          description: The hook that triggered this CDS Service call.
+          description: The hook that triggered this CDS Service call. See [Hooks](https://cds-hooks.org/specification/current/#hooks).
           allOf:
             - $ref: '#/components/schemas/Hook'
         hookInstance:
+          example: d1577c69-dfbe-44ad-ba6d-3e05e953b2ea
           type: string
           format: uuid
+          description: >
+            A universally unique identifier (UUID) for this particular hook call.
+            While working in the CDS Client, a user can perform multiple actions in series or in parallel. For example, a clinician might prescribe two drugs in a row; each prescription action would be assigned a unique `hookInstance`. This allows a CDS Service to uniquely identify each hook invocation.
+            Note: the `hookInstance` is globally unique and should contain enough entropy to be un-guessable."
+
         fhirServer:
           $ref: '#/components/schemas/FhirServer'
         fhirAuthorization:
           $ref: '#/components/schemas/FhirAuthorization'
         context:
+          description: 
+            Hook-specific contextual data that the CDS service will need.
+            For example, with the patient-view hook this will include the FHIR identifier of the [Patient](https://www.hl7.org/fhir/patient.html) being viewed. For details, see the Hooks specification page.
           anyOf:
-            - $ref: '#/components/schemas/PatientViewContext'
+            # - $ref: '#/components/schemas/PatientViewContext'
             - type: object
+          example:
+            userId: Practitioner/example
+            patientId: "1288992"
+            encounterId: "89284"
         prefetch:
           $ref: '#/components/schemas/PrefetchResponse'
+        
+    PrefetchResponse:
+      type: object
+      example:
+        patient:
+         resourceType: Patient
+         gender: male
+         birthDate: "1925-12-23"
+         id: "1288992"
+         active: true
+          
+      additionalProperties:
+        type: object
+      description: >
+        The FHIR data that was prefetched by the CDS Client.
             
     Hook:
       type: string
       example: patient-view
     
     FhirServer:
-      description: The base URL of the CDS Client's FHIR server. If fhirAuthorization is provided, this field is REQUIRED. The scheme should be https
+      description: The base URL of the CDS Client's [FHIR](https://www.hl7.org/fhir/) server. If fhirAuthorization is provided, this field is REQUIRED. The scheme should be `https`
       type: string
       format: url
       example: http://hooks.smarthealthit.org:9080
     
     FhirAuthorization:
       type: object
+      description: A structure holding an [OAuth 2.0](https://oauth.net/2/) bearer access token granting the CDS Service access to FHIR resources, along with supplemental information relating to the token. See the [FHIR Resource Access](https://cds-hooks.org/specification/current/#fhir-resource-access) section for more information.
       required:
         - access_token
         - token_type
@@ -157,16 +254,19 @@ components:
           type: string
           enum:
             - Bearer
-          description: Fixed value *Bearer*
+          description: Fixed value `Bearer`
         expires_in:
           type: integer
           example: 300
+          description: The lifetime in seconds of the access token.
         scope:
           type: string
           example: patient/Patient.read patient/Observation.read
+          description:   The scopes the access token grants the CDS Service. The scopes granted to the CDS Service via the scope field are defined by the [SMART on FHIR specification](http://hl7.org/fhir/smart-app-launch/1.0.0/scopes-and-launch-context/).
         subject:
           type: string
           example: cds-service4
+          description: The [OAuth 2.0](https://oauth.net/2/) client identifier of the CDS Service, as registered with the CDS Client's authorization server.
       
     CdsResponse:
       type: object
@@ -174,9 +274,22 @@ components:
         - cards
       properties:
         cards:
+          description:   An array of **Cards**. Cards can provide a combination of information (for reading), suggested actions (to be applied if a user selects them), and links (to launch an app if the user selects them). The CDS Client decides how to display cards, but this specification recommends displaying suggestions using buttons, and links using underlined text.
           type: array
           items:
             $ref: '#/components/schemas/Card'
+        systemActions:
+          description: An array of actions that the CDS Service proposes to auto-apply. Each action follows the schema of a [card-based `suggestion.action`](https://cds-hooks.org/specification/current/#action). The CDS Client decides whether to auto-apply actions.
+          type: array
+          example:
+            - type: update
+              resource:
+                resourceType: ServiceRequest
+                id: example-MRI-59879846
+                "...": "<snipped for brevity"
+          items:
+            $ref: '#/components/schemas/Action'
+        
     Card:
       type: object
       required:
@@ -184,11 +297,19 @@ components:
         - indicator
         - source
       properties:
+        uuid: 
+          type: string
+          format: uuid
+          description: Unique identifier of the card. MAY be used for auditing and logging cards and SHALL be included in any subsequent calls to the CDS service's feedback endpoint.
         summary:
           type: string
+          description: One-sentence, <140-character summary message for display to the user inside of this card.
         detail:
           type: string
+          description: Optional detailed information to display; if provided MUST be represented in [(GitHub Flavored) Markdown](https://github.github.com/gfm/). (For non-urgent cards, the CDS Client MAY hide these details until the user clicks a link like "view more details...").
         indicator:
+          description: >
+            Urgency/importance of what this card conveys. Allowed values, in order of increasing urgency, are: `info`, `warning`, `critical`. The CDS Client MAY use this field to help make UI display decisions such as sort order or coloring.
           type: string
           enum:
             - info
@@ -201,38 +322,86 @@ components:
           items:
             $ref: '#/components/schemas/Suggestion'
         selectionBehavior:
+          description: >
+            Describes the intended selection behavior of the suggestions in the card. Allowed values are: `at-most-one`, indicating that the user may choose none or at most one of the suggestions;`any`, indicating that the end user may choose any number of suggestions including none of them and all of them. CDS Clients that do not understand the value MUST treat the card as an error.
           type: string
           enum:
             - at-most-one
+            - any
+        overrideReasons: 
+          type: array
+          description: Override reasons can be selected by the end user when overriding a card without taking the suggested recommendations. The CDS service MAY return a list of override reasons to the CDS client. The CDS client SHOULD present these reasons to the clinician when they dismiss a card. A CDS client MAY augment the override reasons presented to the user with its own reasons.
+          items:
+            $ref: '#/components/schemas/Coding'
+          example:
+            - code: reason-code-provided-by-service
+              system: 'http://example.org/cds-services/fhir/CodeSystem/override-reasons'
+              display: Patient refused
+            - code: '12354'
+              system: 'http://example.org/cds-services/fhir/CodeSystem/override-reasons'
+              display: Contraindicated
         links:
+          description: Allows a service to suggest a link to an app that the user might want to run for additional information or to help guide a decision.
           type: array
           items:
             $ref: '#/components/schemas/Link'
+            
     Source:
       type: object
       required:
         - label
       properties:
         label:
+          example: Zika Virus Management
+          description: A short, human-readable label to display for the source of the information displayed on this card. If a `url` is also specified, this MAY be the text for the hyperlink.
           type: string
         url:
+          example: https://example.com/cdc-zika-virus-mgmt
+          description: An optional absolute URL to load (via `GET`, in a browser context) when a user clicks on this link to learn more about the organization or data set that provided the information on this card. Note that this URL should not be used to supply a context-specific "drill-down" view of the information on this card. For that, use `link.url` instead.
           type: string
           format: url
         icon:
+          example: https://example.com/cdc-zika-virus-mgmt/100.png
+          description: An absolute URL to an icon for the source of this card. The icon returned by this URL SHOULD be a 100x100 pixel PNG image without any transparent regions.
           type: string
           format: url
+        topic:
+          description: A *topic* describes the content of the card by providing a high-level categorization that can be useful for filtering, searching or ordered display of related cards in the CDS client's UI. This specification does not prescribe a standard set of topics.
+          example: 
+            system: http://example.org/cds-services/fhir/CodeSystem/topics
+            code: "12345"
+            display: Mosquito born virus
+          allOf:
+            - $ref: '#/components/schemas/Coding'
 
     Link:
       type: object
+      required:
+        - label
+        - url
+        - type
       properties:
         label:
+          example: SMART Example App
+          description: Human-readable label to display for this link (e.g. the CDS Client might render this as the underlined text of a clickable link).
           type: string
         url:
+          example: https://smart.example.com/launch
+          description: URL to load (via `GET`, in a browser context) when a user clicks on this link. Note that this MAY be a "deep link" with context embedded in path segments, query parameters, or a hash.
           type: string
           format: url
         type:
+          example: smart
+          description: >
+            The type of the given URL. There are two possible values for this field. A type of `absolute` indicates that the URL is absolute and should be treated as-is. A type of `smart` indicates that the URL is a SMART app launch URL and the CDS Client should ensure the SMART app launch URL is populated with the appropriate SMART launch parameters.
           type: string
+          enum:
+            - absolute
+            - smart
         appContext:
+          example: "{\"session\":3456356,\"settings\":{\"module\":4235}}"  
+          description: >
+            An optional field that allows the CDS Service to share information from the CDS card with a subsequently launched SMART app. The `appContext` field should only be valued if the link type is `smart` and is not valid for `absolute` links. The `appContext` field and value will be sent to the SMART app as part of the [OAuth 2.0](https://oauth.net/2/) access token response, alongside the other [SMART launch parameters](http://hl7.org/fhir/smart-app-launch/1.0.0/scopes-and-launch-context/#launch-context-arrives-with-your-access_token) when the SMART app is launched. Note that `appContext` could be escaped JSON, base64 encoded XML, or even a simple string, so long as the SMART app can recognize it.
           type: string
     
     Suggestion:
@@ -241,14 +410,21 @@ components:
         - label
       properties:
         label:
+          description: Human-readable label to display for this suggestion (e.g. the CDS Client might render this as the text on a button tied to this suggestion).
           type: string
         uuid:
+          description: Unique identifier, used for auditing and logging suggestions.
           type: string
           format: uuid
         actions:
+          description: Array of objects, each defining a suggested action. Within a suggestion, all actions are logically AND'd together, such that a user selecting a suggestion selects all of the actions within it.
           type: array
           items:
             $ref: '#/components/schemas/Action'
+        isRecommended:
+          type: boolean
+          description: >
+            When there are multiple suggestions, allows a service to indicate that a specific suggestion is recommended from all the available suggestions on the card. CDS Hooks clients may choose to influence their UI based on this value, such as pre-selecting, or highlighting recommended suggestions. Multiple suggestions MAY be recommended, if `card.selectionBehavior` is `any`.
     
     Action:
       type: object
@@ -257,74 +433,120 @@ components:
         - description
       properties:
         type:
+          description: >
+            The type of action being performed. Allowed values are: `create`, `update`, `delete`.
           type: string
+          example: create
           enum:
             - create
             - update
             - delete
         description:
+          example: Create a prescription for Acetaminophen 250 MG
+          description:   Human-readable description of the suggested action MAY be presented to the end-user.
           type: string
         resource:
+          description: >
+            Depending upon the `type` attribute, a new resource or the id of a resource. When the `type` attribute is `create`, the `resource` attribute SHALL contain a new FHIR resource to be created. For `delete`, this SHALL be the id of the resource to remove. In hooks where only one "content" resource is ever relevant, this attribute MAY be omitted for `delete` action types only. For `update`, this holds the updated resource in its entirety and not just the changed fields.
           type: object
-  
-    PrefetchTemplate:
-      type: object
-      additionalProperties:
-        type: string
-      description: queries that the CDS Service would like the CDS Client to execute before every call
-      example:
-          patient: "Patient/{{context.patientId}}"
-          encounters: "Encounter?subject={{context.patientId}}"
-        
-    PrefetchResponse:
-      type: object
-      example:
-        patient:
-          resourceType: Patient
-          gender: male
-          birthDate: '1925-12-23'
-          id: '1288992'
-          active: true
+          example: 
+            resourceType: MedicationRequest
+            id: medrx001
+            ...: <snipped for brevity>
           
-        encounters:
-          resourceType: Bundle
-          entry:
-            - resource:
-                resourceType: Encounter
-                subject:
-                  display: Patient, Test
-                  reference: Patient/1288992
-                participant:
-                  - individual:
-                      display: User, Test
-                      reference: Pracitioner/1254677
-                id: '1345399'
-      additionalProperties:
-        type: object
-      description: >
-        The clinical data that was prefetched by the CDS Client.
-
-    PatientViewContext:
+    Coding:
       type: object
       required:
-        - userId
-        - patientId
-      example:
-        userId: Pracitioner/1254677
-        patientId: '1288992'
+        - code
       properties:
-        userId:
+        code: 
           type: string
-        patientId:
+          description: The code for what is being represented
+        system: 
           type: string
-        encounterId:
+          description: A codesystem for this `code`.
+        display: 
           type: string
+          description: A short, human-readable label to display.
+          
+    Feedback:
+      type: object
+      required:
+        - card
+        - outcome
+        - outcomeTimestamp
+      properties:
+        card: 
+          example: 9368d37b-283f-44a0-93ea-547cebab93ed
+          type: string
+          description: The `card.uuid` from the CDS Hooks response. Uniquely identifies the card.
+        outcome:
+          type: string
+          example: overridden
+          enum:
+            - accepted
+            - overridden
+          description: A value of `accepted` or `overridden`.
+        acceptedSuggestions:
+          description: An array of json objects identifying one or more of the user's **AcceptedSuggestion**s. Required for `accepted` outcomes.
+          type: array
+          items:
+            $ref: '#/components/schemas/AcceptedSuggestion'
+        overrideReason:
+          $ref: '#/components/schemas/OverrideReason'
+        outcomeTimestamp:
+          type: string
+          format: date-time
+          
+    AcceptedSuggestion: 
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "`card.suggestion.uuid` from CDS Hooks response"
+          description: >
+            The `card.suggestion.uuid` from the CDS Hooks response. Uniquely identifies the suggestion that was accepted.
+      
+    OverrideReason:
+      description: A json object capturing the override reason as a `Coding` as well as any comments entered by the user.
+      type: object
+      properties:
+        reason:
+          description: >
+            The Coding object representing the override reason selected by the end user. Required if user selected an override reason from the list of reasons provided in the Card (instead of only leaving a userComment)
+          example:
+            code: reason-code-provided-by-service
+            system: reason-system-provided-by-service
+          allOf:
+            - $ref: '#/components/schemas/OverrideReason'
+        userComment:
+          example: clinician entered comment
+          type: string
+          description: >
+            The CDS Client may enable the clinician to further explain why the card was rejected with free text. That user comment may be communicated to the CDS Service as a `userComment`.
+    
+    # PatientViewContext:
+    #   type: object
+    #   required:
+    #     - userId
+    #     - patientId
+    #   example:
+    #     userId: Pracitioner/1254677
+    #     patientId: '1288992'
+    #   properties:
+    #     userId:
+    #       type: string
+    #     patientId:
+    #       type: string
+    #     encounterId:
+    #       type: string
         
   responses:
     UnauthorizedError:
-      description: CDS client failed to **[authenticate with the service](https://cds-hooks.hl7.org/1.0/#trusting-cds-clients)**
+      description: CDS client failed to **[authenticate with the service](https://cds-hooks.org/specification/current/#trusting-cds-clients)**
     InsufficientContext:
-      description: >-
+      description: >
         The context, prefetch and/or fhirAuthorization provided was not sufficient for this service
   
   securitySchemes:
@@ -332,9 +554,9 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: >-
-        See security recommendations for [trusting CDS Clients](https://cds-hooks.hl7.org/1.0/#trusting-cds-clients)
+      description: >
+        See security recommendations for [trusting CDS Clients](https://cds-hooks.org/specification/current/#trusting-cds-clients)
 
 externalDocs:
   description: CDS Hooks specification
-  url: 'https://cds-hooks.hl7.org/1.0'
+  url: 'https://cds-hooks.org/specification/current/'
